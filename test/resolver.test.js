@@ -316,7 +316,10 @@ test('cheapest: models with no price data sort after priced ones', async () => {
     { id: 'grok-new-mystery', created: MAY+999 },                   // no price intentionally
     { id: 'grok-4-fast',     created: MAR, prompt_text_token_price: 2000 },
   ] } });
-  assert.equal((await m.resolveModel('xai', 'k')).id, 'grok-4-fast');
+  const orig = process.emitWarning.bind(process); const seen = [];
+  process.emitWarning = (msg, opts) => seen.push(opts && opts.code);   // the unpriced model triggers the (intended) warning
+  try { assert.equal((await m.resolveModel('xai', 'k')).id, 'grok-4-fast'); } finally { process.emitWarning = orig; }
+  assert.deepEqual(seen, ['LLM_RESOLVER_PRICE_INCOMPLETE']);
 });
 
 test('cheapest: falls back to provider order when no price data; emits a warning', async () => {
@@ -490,7 +493,7 @@ test('Anthropic entry: priceSource=maintained, priceConfidence=maintained, price
   assert.equal(haiku.priceOut,        5.00);
   assert.equal(haiku.priceSource,     'maintained');
   assert.equal(haiku.priceConfidence, 'maintained');
-  assert.equal(haiku.priceUpdated,    '2026-09-29');   // matches economy.yml updated date
+  assert.equal(haiku.priceUpdated,    require('../profiles/economy.js').providers.anthropic.knownPrices.updated);   // whatever economy.yml says
   const opus = ev.candidates.find(c => c.id === 'claude-opus-5');
   assert.equal(opus.priceIn,  15.00);
   assert.equal(opus.priceOut, 75.00);
@@ -614,4 +617,49 @@ test('configure: prefer can be set, cleared, and appears in effectiveConfig and 
   assert.equal(m.effectiveConfig('xai').prefer, null);
   m.configure({});
   assert.equal(m.effectiveConfig('xai').prefer, null);
+});
+
+// ── economy/Anthropic: unpriced models must not vanish silently ──────────────
+// Fixture: the Anthropic listing of one account on 24 Oct 2026 (`node inspect.js anthropic --all`).
+// claude-haiku-5-5 had no knownPrices entry, so cheapest ranking put it last behind a $1.00 model.
+const ANT_LISTING_20261024 = { data: [
+  ['claude-haiku-4-5-20251001', '2025-10-15'], ['claude-sonnet-5-5', '2026-09-28'], ['claude-sonnet-5', '2026-06-29'],
+  ['claude-opus-5-5', '2026-09-21'], ['claude-opus-5', '2026-07-24'], ['claude-haiku-5-5', '2026-10-07'],
+  ['claude-fable-5-1', '2026-08-28'], ['claude-fable-5', '2026-06-07'],
+].map(([id, d]) => ({ id, created_at: d + 'T00:00:00Z' })) };
+
+test('economy/anthropic: the newest, cheaper Haiku (5.5) is chosen, and fable models are excluded', async () => {
+  const m = load(); m.useProfile('economy'); mockNet({ [AN]: ANT_LISTING_20261024 });
+  const ev = await m.inspectModels('anthropic', 'k');
+  assert.equal(ev.id, 'claude-haiku-5-5');
+  const by = Object.fromEntries(ev.candidates.map(c => [c.id, c]));
+  assert.equal(by['claude-haiku-5-5'].priceIn, 0.10);
+  assert.equal(by['claude-fable-5-1'].status, 'excluded');
+});
+
+test('economy/anthropic: every listed eligible model has a price (the table is not behind the listing)', async () => {
+  const m = load(); m.useProfile('economy'); mockNet({ [AN]: ANT_LISTING_20261024 });
+  const ev = await m.inspectModels('anthropic', 'k');
+  const unpriced = ev.candidates.filter(c => (c.status === 'chosen' || c.status === 'eligible') && c.priceIn == null).map(c => c.id);
+  assert.deepEqual(unpriced, []);
+});
+
+test('claude-3-haiku IDs match the price table (the key used to be claude-haiku-3)', async () => {
+  const m = load(); m.useProfile('economy');
+  mockNet({ [AN]: { data: [{ id: 'claude-3-haiku-20240307', created_at: '2024-03-07T00:00:00Z' }, { id: 'claude-haiku-4-5-20251001', created_at: '2025-10-15T00:00:00Z' }] } });
+  const ev = await m.inspectModels('anthropic', 'k');
+  assert.equal(ev.id, 'claude-3-haiku-20240307');
+  assert.equal(ev.candidates.find(c => c.id === 'claude-3-haiku-20240307').priceIn, 0.25);
+});
+
+test('cheapest warns once when an eligible model has no price, naming it', async () => {
+  const m = load(); m.useProfile('economy');
+  mockNet({ [AN]: { data: [{ id: 'claude-haiku-4-5-20251001', created_at: '2025-10-15T00:00:00Z' }, { id: 'claude-brandnew-9', created_at: '2026-10-20T00:00:00Z' }] } });
+  const warnings = []; const orig = process.emitWarning.bind(process);
+  process.emitWarning = (msg, opts) => warnings.push({ msg, code: opts && opts.code });
+  try { await m.resolveModel('anthropic', 'k'); await m.resolveModel('anthropic', 'k', { forceRefresh: true }); }
+  finally { process.emitWarning = orig; }
+  const w = warnings.filter(x => x.code === 'LLM_RESOLVER_PRICE_INCOMPLETE');
+  assert.equal(w.length, 1, 'once per provider per process');
+  assert.match(w[0].msg, /claude-brandnew-9/);
 });

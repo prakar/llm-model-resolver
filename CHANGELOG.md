@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.1
+
+### Fixed
+- **Economy/Anthropic skipped the newest Haiku.** `claude-haiku-5-5` had no entry in `knownPrices`, and
+  unpriced models rank last, so it was never chosen. Added `claude-haiku-5` ($0.10/$0.50 for prompts up to
+  100k tokens; from two secondary sources, not yet checked against Anthropic's page). Economy now picks it.
+- The `claude-haiku-3` key could never match `claude-3-haiku-20240307`; it is now `claude-3-haiku`.
+- `fable` and `mythos` (flagship-tier, unpriced) are excluded from the economy profile for Anthropic.
+
+### Added
+- **`LLM_RESOLVER_PRICE_INCOMPLETE` warning** (once per provider per process): under `order: cheapest`,
+  names eligible models that have no price and were therefore ranked last.
+
 ## 1.5.0
 
 **Behavior change — read this.** The economy profile now prefers **non-reasoning** xAI models, and the

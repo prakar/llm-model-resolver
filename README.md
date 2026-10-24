@@ -128,6 +128,10 @@ belongs in your application, not here. When you account for xAI calls, count the
 tokens (`completion_tokens_details.reasoning_tokens`), which are reported separately from
 the visible output.
 
+Models with no price are ranked **last**. If some models are priced and some eligible ones
+are not, a one-time `LLM_RESOLVER_PRICE_INCOMPLETE` warning names them, so a new model
+missing from `knownPrices` is not skipped silently: add it to the table, or to `exclude`.
+
 If `cheapest` is requested but no price data exists for a provider (neither from the API
 nor from `knownPrices`), a `LLM_RESOLVER_PRICE_UNAVAILABLE` warning is emitted and the
 provider's own list order is used instead of silently returning the wrong model.
@@ -176,14 +180,15 @@ providers:
 
   anthropic:
     include: "^claude-"
-    exclude: "instant|mini"
+    exclude: "instant|mini|fable|mythos"
     fallback: "claude-haiku-4-5"
     knownPrices:
       source: maintained
-      updated: "2026-09-29"
+      updated: "2026-10-24"
       models:
-        claude-haiku-3:  { input: 0.25,  output: 1.25  }
+        claude-3-haiku:  { input: 0.25,  output: 1.25  }
         claude-haiku-4:  { input: 1.00,  output: 5.00  }
+        claude-haiku-5:  { input: 0.10,  output: 0.50  }   # prompts up to 100k tokens; 5x above
         claude-sonnet-5: { input: 3.00,  output: 15.00 }
         claude-opus-5:   { input: 15.00, output: 75.00 }
 
@@ -211,6 +216,7 @@ account's xAI listing in October 2026 contained none of the `fast` models, so ru
 | xAI | `grok-4.3` | $1.25 | $2.50 |
 | Anthropic | `claude-3-haiku-20240307` | $0.25 | $1.25 |
 | Anthropic | `claude-haiku-4-5` | $1.00 | $5.00 |
+| Anthropic | `claude-haiku-5-5` | $0.10 | $0.50 |
 | Gemini | `gemini-2.5-flash` | $0.075 | $0.30 |
 
 ---

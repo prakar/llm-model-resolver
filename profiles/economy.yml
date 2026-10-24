@@ -46,17 +46,21 @@ providers:
 
   anthropic:
     include:  "^claude-"
-    exclude:  "instant|mini"
+    # fable|mythos: flagship-tier models, never an economy pick (and they have no listed price)
+    exclude:  "instant|mini|fable|mythos"
     fallback: "claude-haiku-4-5"
     knownPrices:
       source:  maintained
-      updated: "2026-09-29"
+      updated: "2026-10-24"
       # Prices in USD per million tokens. Anthropic's /v1/models does not return pricing.
       # Prefix match: "claude-haiku-4" matches "claude-haiku-4-5-20251001" etc.
       # Verify current rates at: https://www.anthropic.com/pricing
       models:
-        claude-haiku-3:     { input:  0.25, output:  1.25 }   # claude-3-haiku-20240307
+        claude-3-haiku:     { input:  0.25, output:  1.25 }   # claude-3-haiku-20240307 (the ID starts "claude-3-", so the old key claude-haiku-3 never matched it)
         claude-haiku-4:     { input:  1.00, output:  5.00 }   # claude-haiku-4-5 and variants
+        # Haiku 5.5 (2026-10-07): $0.10/$0.50 for prompts up to 100k tokens; above that every line
+        # is 5x ($0.50/$2.50). Taken from two articles citing Anthropic's pricing page; verify at the URL above.
+        claude-haiku-5:     { input:  0.10, output:  0.50 }
         claude-sonnet-4:    { input:  3.00, output: 15.00 }
         claude-sonnet-5:    { input:  3.00, output: 15.00 }
         claude-opus-4:      { input: 15.00, output: 75.00 }

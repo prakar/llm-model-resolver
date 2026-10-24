@@ -202,6 +202,7 @@ let   _orFreeIdx = 0;
 const _failedAt  = { xai: 0, anthropic: 0, gemini: 0, openrouter: 0 };
 const _lastError = { xai: null, anthropic: null, gemini: null, openrouter: null };
 const _now       = () => Date.now();
+const _warnedUnpriced = new Set();   // providers already warned about unpriced models (once per process)
 
 // Known-bad models: in-memory only (see README — this is intentional).
 const _knownBad = { xai: new Set(), anthropic: new Set(), gemini: new Set() };
@@ -469,6 +470,19 @@ async function evaluate(provider, apiKey, options) {
         { code: 'LLM_RESOLVER_PRICE_UNAVAILABLE' }
       );
     }
+    // Cheapest ranks unpriced models LAST, so a new model missing from knownPrices is silently
+    // skipped (Haiku 5.5 was, for weeks). Say so once per provider per process.
+    if (effectiveMode === 'cheapest' && entries.some(e => e.priceIn != null) && !_warnedUnpriced.has(p)) {
+      const unpriced = entries.filter(e => e.priceIn == null && (!pc.include || pc.include.test(e.id)) && !(pc.exclude && pc.exclude.test(e.id)) && !_knownBad[p]?.has(e.id)).map(e => e.id);
+      if (unpriced.length) {
+        _warnedUnpriced.add(p);
+        process.emitWarning(
+          'llm-model-resolver: order:cheapest for ' + p + ' ranks these eligible models last because they have no price: ' +
+          unpriced.join(', ') + '. Add them to knownPrices (or to exclude) in your profile.',
+          { code: 'LLM_RESOLVER_PRICE_INCOMPLETE' }
+        );
+      }
+    }
     const mode   = effectiveMode;
     // options.prefer overrides the profile's preference for this call (null switches it off).
     const prefer = ('prefer' in options) ? _toRegex(options.prefer) : pc.prefer;
@@ -543,6 +557,7 @@ function markModelBad(provider, modelId) {
 function clearCache() {
   for (const p of PROVIDERS) { _cache[p] = null; _failedAt[p] = 0; _lastError[p] = null; }
   _knownBad.xai?.clear(); _knownBad.anthropic?.clear(); _knownBad.gemini?.clear();
+  _warnedUnpriced.clear();
   _orFreeIdx = 0;
 }
 

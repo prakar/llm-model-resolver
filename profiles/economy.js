@@ -16,19 +16,23 @@ module.exports = {
     },
     "anthropic": {
       "include": "^claude-",
-      "exclude": "instant|mini",
+      "exclude": "instant|mini|fable|mythos",
       "fallback": "claude-haiku-4-5",
       "knownPrices": {
         "source": "maintained",
-        "updated": "2026-09-29",
+        "updated": "2026-10-24",
         "models": {
-          "claude-haiku-3": {
+          "claude-3-haiku": {
             "input": 0.25,
             "output": 1.25
           },
           "claude-haiku-4": {
             "input": 1,
             "output": 5
+          },
+          "claude-haiku-5": {
+            "input": 0.1,
+            "output": 0.5
           },
           "claude-sonnet-4": {
             "input": 3,

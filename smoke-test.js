@@ -32,7 +32,7 @@ async function run() {
 
   for (const [provider, key] of Object.entries(keys)) {
     const r = await resolveModel(provider, key);
-    const via = r.orderedBy ? `, newest by ${r.orderedBy}` : '';
+    const via = r.orderedBy ? `, by ${r.orderedBy}` : '';
     console.log(`${provider.padEnd(12)} → ${r.id}  (${r.source}${via})${key ? '' : '  [no key]'}`);
   }
 
