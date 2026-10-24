@@ -55,19 +55,31 @@ module.exports = {
     },
     "gemini": {
       "include": "gemini-",
-      "exclude": "lite|embedding|aqa|imagen|veo|tts|live|image|audio",
+      "exclude": "lite|embedding|aqa|imagen|veo|tts|live|image|audio|nano-banana|transcribe|robotics|computer-use|latest",
       "fallback": "gemini-flash-latest",
       "knownPrices": {
         "source": "maintained",
-        "updated": "2026-09-29",
+        "updated": "2026-10-24",
         "models": {
-          "gemini-flash-latest": {
-            "input": 0.075,
-            "output": 0.3
-          },
           "gemini-2.5-flash": {
             "input": 0.075,
             "output": 0.3
+          },
+          "gemini-3.5-flash": {
+            "input": 1.5,
+            "output": 9
+          },
+          "gemini-3.6-flash": {
+            "input": 0.75,
+            "output": 3.75
+          },
+          "gemini-3.7-flash": {
+            "input": 0.75,
+            "output": 3.75
+          },
+          "gemini-3.8-flash": {
+            "input": 0.75,
+            "output": 3.75
           },
           "gemini-2.5-pro": {
             "input": 1.25,

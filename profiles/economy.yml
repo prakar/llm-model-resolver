@@ -68,17 +68,27 @@ providers:
 
   gemini:
     include:  "gemini-"
-    exclude:  "lite|embedding|aqa|imagen|veo|tts|live|image|audio"
+    # Excludes beyond the obvious non-text families: nano-banana (image), transcribe (audio),
+    # robotics-er and computer-use (specialised agents), and *-latest aliases: an alias moves
+    # to a new model without notice, so a fixed price for it can silently become wrong
+    # (gemini-flash-latest may now point at a model 10x the price of 2.5 Flash).
+    # The fallback below is still gemini-flash-latest; a fallback is not ranked by price.
+    exclude:  "lite|embedding|aqa|imagen|veo|tts|live|image|audio|nano-banana|transcribe|robotics|computer-use|latest"
     fallback: "gemini-flash-latest"
     knownPrices:
       source:  maintained
-      updated: "2026-09-29"
+      updated: "2026-10-24"
       # Prices in USD per million tokens. Gemini's /v1beta/models does not return pricing.
       # Gemini Pro pricing is for prompts up to 200k tokens; doubles above that threshold.
       # Verify current rates at: https://ai.google.dev/gemini-api/docs/pricing
       models:
-        gemini-flash-latest:  { input: 0.075, output:  0.30 }
         gemini-2.5-flash:     { input: 0.075, output:  0.30 }
+        # Newer Flash models, from two secondary sources (saygm.com 2026-10-05, openrouter.ai); verify at
+        # the URL above. Google's rate for 3.6, 3.7 and 3.8 Flash is scheduled to DOUBLE on 2027-01-01.
+        gemini-3.5-flash:     { input: 1.50,  output:  9.00 }
+        gemini-3.6-flash:     { input: 0.75,  output:  3.75 }
+        gemini-3.7-flash:     { input: 0.75,  output:  3.75 }
+        gemini-3.8-flash:     { input: 0.75,  output:  3.75 }
         gemini-2.5-pro:       { input: 1.25,  output:  5.00 }
         gemini-3-pro:         { input: 1.25,  output:  5.00 }
         gemini-3.1-pro:       { input: 1.25,  output:  5.00 }

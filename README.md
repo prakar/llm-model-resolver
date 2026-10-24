@@ -194,16 +194,23 @@ providers:
 
   gemini:
     include: "gemini-"
-    exclude: "lite|embedding|aqa|imagen|veo|tts|live|image|audio"
+    exclude: "lite|embedding|aqa|imagen|veo|tts|live|image|audio|nano-banana|transcribe|robotics|computer-use|latest"
     fallback: "gemini-flash-latest"
     knownPrices:
       source: maintained
-      updated: "2026-09-29"
+      updated: "2026-10-24"
       models:
         gemini-2.5-flash:    { input: 0.075, output: 0.30 }
-        gemini-flash-latest: { input: 0.075, output: 0.30 }
+        gemini-3.5-flash:    { input: 1.50,  output: 9.00 }
+        gemini-3.6-flash:    { input: 0.75,  output: 3.75 }   # 3.6 to 3.8: Google's rate doubles on 2027-01-01
+        gemini-3.7-flash:    { input: 0.75,  output: 3.75 }
+        gemini-3.8-flash:    { input: 0.75,  output: 3.75 }
         gemini-2.5-pro:      { input: 1.25,  output: 5.00 }
 ```
+
+`*-latest` aliases (such as `gemini-flash-latest`) are excluded from economy ranking: they move to
+new models without notice, so a fixed price for them cannot be trusted. They remain valid as
+fallbacks.
 
 Fast/cheap models as listed in September 2026. **Availability varies by account**: one
 account's xAI listing in October 2026 contained none of the `fast` models, so run
@@ -218,6 +225,7 @@ account's xAI listing in October 2026 contained none of the `fast` models, so ru
 | Anthropic | `claude-haiku-4-5` | $1.00 | $5.00 |
 | Anthropic | `claude-haiku-5-5` | $0.10 | $0.50 |
 | Gemini | `gemini-2.5-flash` | $0.075 | $0.30 |
+| Gemini | `gemini-3.8-flash` | $0.75 | $3.75 |
 
 ---
 

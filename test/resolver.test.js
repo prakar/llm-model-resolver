@@ -663,3 +663,27 @@ test('cheapest warns once when an eligible model has no price, naming it', async
   assert.equal(w.length, 1, 'once per provider per process');
   assert.match(w[0].msg, /claude-brandnew-9/);
 });
+
+// ── economy/Gemini: the 24 Oct 2026 listing ──────────────────────────────────
+const GEM_LISTING_20261024 = { models: ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3.5-flash',
+  'gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-nano-banana-2.1', 'gemini-3.5-transcribe',
+  'gemini-robotics-er-2-preview', 'gemini-2.5-computer-use-preview-10-2025', 'gemini-omni-flash-preview', 'gemini-omni-1.1-flash',
+  'gemini-4-argon'].map(n => G(n)) };
+
+test('economy/gemini: 2.5 Flash is chosen; newer Flash models are priced; aliases and non-text models are excluded', async () => {
+  const m = load(); m.useProfile('economy'); mockNet({ [GE]: GEM_LISTING_20261024 });
+  const warnings = []; const orig = process.emitWarning.bind(process);
+  process.emitWarning = (msg, opts) => warnings.push({ msg, code: opts && opts.code });
+  let ev; try { ev = await m.inspectModels('gemini', 'k'); } finally { process.emitWarning = orig; }
+  assert.equal(ev.id, 'gemini-2.5-flash');
+  const by = Object.fromEntries(ev.candidates.map(c => [c.id, c]));
+  assert.equal(by['gemini-3.8-flash'].priceIn, 0.75);
+  assert.equal(by['gemini-3.5-flash'].priceIn, 1.50);
+  for (const id of ['gemini-flash-latest', 'gemini-nano-banana-2.1', 'gemini-3.5-transcribe', 'gemini-robotics-er-2-preview', 'gemini-2.5-computer-use-preview-10-2025'])
+    assert.equal(by[id].status, 'excluded', id);
+  // Only models nobody has classified are left to the warning.
+  const w = warnings.find(x => x.code === 'LLM_RESOLVER_PRICE_INCOMPLETE');
+  assert.ok(w, 'expected the unpriced-models warning');
+  for (const id of ['gemini-3-flash-preview', 'gemini-omni-flash-preview', 'gemini-omni-1.1-flash', 'gemini-4-argon']) assert.match(w.msg, new RegExp(id.replace(/\./g, '\\.')));
+  assert.doesNotMatch(w.msg, /gemini-3\.8-flash|gemini-3\.5-flash|nano-banana|latest/);
+});

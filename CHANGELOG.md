@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.2
+
+### Fixed
+- **Economy/Gemini price table was behind the listing.** `gemini-3.5-flash` and `3.6`/`3.7`/`3.8-flash` had no price
+  and ranked last (correctly, by luck: they cost about 10x `gemini-2.5-flash`). Added prices from two secondary
+  sources, not yet checked against Google's page: 3.5 Flash $1.50/$9.00, 3.6 to 3.8 Flash $0.75/$3.75 per million
+  tokens. Google's rate for 3.6 to 3.8 is scheduled to double on 2027-01-01, so update them then.
+- Economy/Gemini now excludes non-text models (`nano-banana`, `transcribe`, `robotics`, `computer-use`) and
+  `*-latest` aliases, whose price can silently change when the alias moves. `gemini-flash-latest` is still the
+  fallback. The former `gemini-flash-latest` price entry is removed.
+- Eligible models still unpriced (`gemini-3-flash-preview`, the `omni` and `argon` models, at the time of
+  writing) are left to the `LLM_RESOLVER_PRICE_INCOMPLETE` warning until someone confirms what they are.
+
 ## 1.5.1
 
 ### Fixed
