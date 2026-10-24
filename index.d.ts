@@ -2,7 +2,9 @@
 
 export type Provider  = 'xai' | 'anthropic' | 'gemini' | 'openrouter';
 export type ResolveSource = 'live' | 'pinned' | 'fallback';
-export type OrderedBy = 'created' | 'version' | 'provider';
+export type OrderedBy = 'created' | 'version' | 'cheapest' | 'provider';
+export type OrderMode = 'newest' | 'oldest' | 'cheapest' | 'provider';
+export type ProfileName = 'flagship' | 'economy';
 
 export interface KnownPriceEntry {
   input:  number;
@@ -19,6 +21,11 @@ export interface ProviderConfig {
   pin?:         string | null;
   include?:     RegExp | null;
   exclude?:     RegExp | null;
+  /**
+   * Models matching this pattern rank ahead of all other eligible models (each group is then
+   * ordered by `order`). Soft rule: if nothing matches, it is ignored. null = no preference.
+   */
+  prefer?:      RegExp | null;
   fallback?:    string;
   /** Maintained price table for providers whose /models API doesn't return pricing. */
   knownPrices?: KnownPrices | Record<string, number>;   // rich or legacy flat form
@@ -27,7 +34,7 @@ export interface ProviderConfig {
 export interface GlobalConfig {
   timeoutMs?:  number;
   cooldownMs?: number;
-  order?:      'newest' | 'oldest' | 'provider';
+  order?:      OrderMode;
 }
 
 export interface Config {
@@ -38,7 +45,9 @@ export interface Config {
 export interface ResolveOptions {
   forceRefresh?: boolean;
   fallback?:     string;
-  order?:        'newest' | 'oldest' | 'provider';
+  order?:        OrderMode;
+  /** Override the profile's `prefer` pattern for this call (RegExp or string). null = price/order only. */
+  prefer?:       RegExp | string | null;
   timeoutMs?:    number;
   cooldownMs?:   number;
 }
@@ -68,6 +77,8 @@ export interface Candidate {
   priceConfidence:  PriceConfidence | null;
   /** ISO date string: when the knownPrices entry was last verified. null for provider-api. */
   priceUpdated:     string | null;
+  /** True when the model matched the active `prefer` pattern and was eligible. */
+  preferred:        boolean;
   status:           CandidateStatus;
   rank:             number | null;
 }
@@ -94,6 +105,12 @@ export function configure(cfg: Config): void;
  * YAML requires js-yaml: npm install js-yaml
  */
 export function loadConfig(filePath: string): Config;
+
+/** Switch to a bundled profile ('flagship' or 'economy'). Clears the model-list cache. */
+export function useProfile(name: ProfileName): Config;
+
+/** Names of the bundled profiles. */
+export const AVAILABLE_PROFILES: ReadonlyArray<ProfileName>;
 
 /** Return the effective rules for a provider (reflects the active config). */
 export function effectiveConfig(provider: Provider): Required<ProviderConfig>;
@@ -126,4 +143,4 @@ export function clearCache(): void;
 export const DEFAULT_FALLBACKS:  Readonly<Record<Provider, string>>;
 export const DEFAULT_TIMEOUT_MS:  number;
 export const DEFAULT_COOLDOWN_MS: number;
-export const PREFERENCE: Readonly<Record<Exclude<Provider,'openrouter'>, { include: RegExp | null; exclude: RegExp | null }>>;
+export const PREFERENCE: Readonly<Record<Exclude<Provider,'openrouter'>, { include: RegExp | null; exclude: RegExp | null; prefer: RegExp | null }>>;

@@ -10,7 +10,8 @@ module.exports = {
   "providers": {
     "xai": {
       "include": "^grok-",
-      "exclude": "non-?reasoning|image|imagine|video|code-fast",
+      "exclude": "image|imagine|video|code-fast",
+      "prefer": "non-?reasoning",
       "fallback": "grok-4.3"
     },
     "anthropic": {

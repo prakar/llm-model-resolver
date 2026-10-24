@@ -14,38 +14,77 @@ const SRC = fs.readFileSync(path.join(root, 'index.js'), 'utf8');
 const DTS = fs.readFileSync(path.join(root, 'index.d.ts'), 'utf8');
 const m = require('../index.js');
 
-test('the rules block in the README is exactly PREFERENCE', () => {
-  const block = README.match(/```js\nxai:[\s\S]*?```/);
-  assert.ok(block, 'rules block not found');
-  for (const p of ['xai', 'anthropic', 'gemini']) {
-    const line = block[0].split('\n').find(l => l.startsWith(p + ':'));
-    assert.ok(line, p + ' line missing');
-    const inc = line.match(/include: (\/.*?\/i)/)[1];
-    const exc = line.match(/exclude: (\/.*?\/i)/)[1];
-    assert.equal(inc, String(m.PREFERENCE[p].include), p + ' include');
-    assert.equal(exc, String(m.PREFERENCE[p].exclude), p + ' exclude');
+// The bundled profiles are the source of truth for rules, fallbacks and timeouts; the README
+// documents them. Read the generated .js form (what the package loads at runtime).
+const PROFILES = { economy: require('../profiles/economy.js'), flagship: require('../profiles/flagship.js') };
+const section = (title) => {
+  const start = README.indexOf('## ' + title);
+  assert.ok(start >= 0, 'README section not found: ' + title);
+  const next = README.indexOf('\n## ', start + 3);
+  return README.slice(start, next < 0 ? undefined : next);
+};
+
+test('the README shows each profile\'s include, exclude and prefer rules exactly', () => {
+  const docs = { economy: section('Economy profile'), flagship: section('Flagship profile') };
+  for (const [name, prof] of Object.entries(PROFILES)) {
+    for (const [p, rules] of Object.entries(prof.providers)) {
+      for (const field of ['include', 'exclude', 'prefer']) {
+        if (!rules[field]) continue;
+        assert.ok(docs[name].includes(`${field}:`) && docs[name].includes(`"${rules[field]}"`),
+          `${name}/${p}: README does not show ${field} "${rules[field]}"`);
+      }
+    }
   }
 });
 
-test('the defaults table lists exactly DEFAULT_FALLBACKS', () => {
-  const section = README.slice(README.indexOf('## Fallbacks'));
-  const rows = [...section.matchAll(/^\| `(xai|anthropic|gemini|openrouter)`\s*\| `([^`]+)`/gm)];
+test('the economy profile prefers non-reasoning xAI models and does not exclude them', () => {
+  const xai = PROFILES.economy.providers.xai;
+  assert.equal(xai.prefer, 'non-?reasoning');
+  assert.ok(!new RegExp(xai.exclude, 'i').test('grok-4.20-0309-non-reasoning'), 'economy must not exclude non-reasoning');
+});
+
+test('the Fallbacks table lists each profile\'s real fallbacks', () => {
+  const sec = README.slice(README.indexOf('## Fallbacks'), README.indexOf('## Potential future work'));
+  const rows = [...sec.matchAll(/^\| `(xai|anthropic|gemini|openrouter)`\s*\| `([^`]+)`\s*\| `([^`]+)`/gm)];
   assert.equal(rows.length, 4, 'expected one row per provider');
-  // The exported defaults can be overridden by env vars; compare to the built-in values.
+  // Compare to the profiles' own values; openrouter has no profile entry, so use the built-in.
+  const builtIn = { openrouter: 'openrouter/free' };
   const clean = { ...process.env };
-  for (const k of ['XAI_MODEL_FALLBACK', 'GROK_MODEL_FALLBACK', 'ANTHROPIC_MODEL_FALLBACK', 'GEMINI_MODEL_FALLBACK', 'OPENROUTER_MODEL_FALLBACK', 'OPENROUTER_FREE_FALLBACK']) delete clean[k];
+  for (const k of ['XAI_MODEL_FALLBACK', 'GROK_MODEL_FALLBACK', 'ANTHROPIC_MODEL_FALLBACK', 'GEMINI_MODEL_FALLBACK', 'OPENROUTER_MODEL_FALLBACK', 'OPENROUTER_FREE_FALLBACK', 'LLM_MODEL_RESOLVER_PROFILE']) delete clean[k];
   const out = cp.execFileSync(process.execPath, ['-e', "console.log(JSON.stringify(require('./index.js').DEFAULT_FALLBACKS))"], { cwd: root, env: clean }).toString();
-  const defaults = JSON.parse(out);
-  for (const [, provider, id] of rows) assert.equal(id, defaults[provider], provider);
+  const active = JSON.parse(out);   // the default profile (settings.yml → economy)
+  for (const [, provider, economy, flagship] of rows) {
+    const pe = (PROFILES.economy.providers[provider] || {}).fallback || builtIn[provider];
+    const pf = (PROFILES.flagship.providers[provider] || {}).fallback || builtIn[provider];
+    assert.equal(economy, pe, provider + ' economy');
+    assert.equal(flagship, pf, provider + ' flagship');
+    assert.equal(active[provider], pe, provider + ' is not what the default profile gives');
+  }
 });
 
 test('the documented timeout and cool-down defaults are the real ones', () => {
-  assert.equal(m.DEFAULT_TIMEOUT_MS, 10000);
-  assert.equal(m.DEFAULT_COOLDOWN_MS, 60000);
+  const clean = { ...process.env }; delete clean.LLM_MODEL_RESOLVER_PROFILE;
+  // With no profile loaded the built-in values apply; configure({}) resets to them.
+  const b = JSON.parse(cp.execFileSync(process.execPath, ['-e',
+    "const m=require('./index.js');m.configure({});console.log(JSON.stringify([m.DEFAULT_TIMEOUT_MS,m.DEFAULT_COOLDOWN_MS]))"], { cwd: root, env: clean }).toString());
+  assert.deepEqual(b, [10000, 60000]);
   assert.match(README, /default 10000/);
   assert.match(README, /default 60000/);
   assert.match(README, /\*\*10 seconds\*\*/);
   assert.match(README, /60 seconds/);
+  // The profiles' own timeouts, as documented.
+  assert.equal(PROFILES.economy.global.timeoutMs, 300000);
+  assert.equal(PROFILES.flagship.global.timeoutMs, 600000);
+  assert.match(README, /\*\*5 minutes\*\* in economy/);
+  assert.match(README, /\*\*10 minutes\*\* in flagship/);
+});
+
+test('npm test runs every test file (the README guard used to be skipped)', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const files = fs.readdirSync(__dirname).filter(f => f.endsWith('.test.js'));
+  for (const f of files) {
+    assert.ok(pkg.scripts.test.includes('test/*.test.js') || pkg.scripts.test.includes(f), 'npm test does not run ' + f);
+  }
 });
 
 test('every export is documented in the README and declared in the types', () => {
@@ -116,5 +155,19 @@ test('the old package name appears only in the "formerly published as" note', ()
 test('the README does not claim things the code no longer does', () => {
   for (const stale of ['does not sort', 'no version sorting', 'No request timeout', 'No version sorting', 'aren\'t filtered by capability']) {
     assert.ok(!README.includes(stale), 'stale claim still in the README: ' + stale);
+  }
+});
+
+test('package.json license matches the LICENSE file and the README', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  assert.ok(fs.readFileSync(path.join(root, 'LICENSE'), 'utf8').startsWith(pkg.license), 'LICENSE does not start with ' + pkg.license);
+  assert.ok(README.trimEnd().endsWith(pkg.license), 'README license line is not ' + pkg.license);
+});
+
+test('profiles/*.js are the generated form of profiles/*.yml (skipped when js-yaml is not installed)', (t) => {
+  let yaml; try { yaml = require('js-yaml'); } catch (_) { return t.skip('js-yaml not installed'); }
+  for (const name of ['economy', 'flagship']) {
+    const fromYml = yaml.load(fs.readFileSync(path.join(root, 'profiles', name + '.yml'), 'utf8'));
+    assert.deepEqual(require('../profiles/' + name + '.js'), fromYml, name + '.js is stale: run npm run build-profiles');
   }
 });

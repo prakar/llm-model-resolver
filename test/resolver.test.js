@@ -539,3 +539,79 @@ test('no warning when price data IS available (xAI provider-api case)', async ()
   finally { process.emitWarning = orig; }
   assert.equal(warnings.filter(w => /PRICE_UNAVAILABLE/.test(w)).length, 0);
 });
+
+// ── prefer: the economy profile prefers non-reasoning xAI models ─────────────
+// Fixture: the real /v1/language-models listing of one account (24 Oct 2026), as `node
+// inspect.js xai` printed it. grok-build-0.1 has the lowest input price ($1.00/M) but is a
+// reasoning model (one note: 1.9k output + 10.5k hidden reasoning tokens), so ranking by input
+// price alone picked it. Prices are in API units (÷1e4 = $/M).
+const LISTING_20261024 = { models: [
+  { id: 'grok-build-0.1',               created: 1776297600, prompt_text_token_price: 10000 },
+  { id: 'grok-4.20-0309-reasoning',     created: MAR,        prompt_text_token_price: 12500 },
+  { id: 'grok-4.20-multi-agent-0309',   created: MAR,        prompt_text_token_price: 12500 },
+  { id: 'grok-4.20-0309-non-reasoning', created: MAR,        prompt_text_token_price: 12500 },
+  { id: 'grok-4.3',                     created: 1776384000, prompt_text_token_price: 12500 },
+  { id: 'grok-4.5',                     created: 1782691200, prompt_text_token_price: 20000 },
+  { id: 'grok-4.6',                     created: 1786060800, prompt_text_token_price: 20000 },
+  { id: 'grok-4.7',                     created: 1788307200, prompt_text_token_price: 20000 },
+] };
+
+test('economy: with the 24 Oct 2026 listing, the non-reasoning model wins, not grok-build-0.1', async () => {
+  const m = load(); m.useProfile('economy'); mockNet({ [XL]: LISTING_20261024 });
+  const ev = await m.inspectModels('xai', 'k');
+  assert.equal(ev.id, 'grok-4.20-0309-non-reasoning');
+  assert.equal(ev.orderedBy, 'cheapest');
+  const by = Object.fromEntries(ev.candidates.map(c => [c.id, c]));
+  assert.equal(by['grok-4.20-0309-non-reasoning'].status, 'chosen');
+  assert.equal(by['grok-4.20-0309-non-reasoning'].preferred, true);
+  assert.equal(by['grok-build-0.1'].preferred, false);
+  assert.equal(by['grok-build-0.1'].rank, 2, 'next cheapest after the preferred group');
+});
+
+test('prefer:null on a call restores price-only ranking', async () => {
+  const m = load(); m.useProfile('economy'); mockNet({ [XL]: LISTING_20261024 });
+  assert.equal((await m.resolveModel('xai', 'k', { prefer: null })).id, 'grok-build-0.1');
+});
+
+test('prefer: a caller can ask for reasoning variants instead', async () => {
+  const m = load(); m.useProfile('economy'); mockNet({ [XL]: LISTING_20261024 });
+  assert.equal((await m.resolveModel('xai', 'k', { prefer: /(?<!non-)reasoning/i })).id, 'grok-4.20-0309-reasoning');
+  assert.equal((await m.resolveModel('xai', 'k', { prefer: '(?<!non-)reasoning' })).id, 'grok-4.20-0309-reasoning', 'a string works too');
+});
+
+test('prefer is a soft rule: with no match it is ignored', async () => {
+  const m = load(); m.useProfile('economy');
+  const noNonReasoning = { models: LISTING_20261024.models.filter(x => !/non-reasoning/.test(x.id)) };
+  mockNet({ [XL]: noNonReasoning });
+  const ev = await m.inspectModels('xai', 'k');
+  assert.equal(ev.id, 'grok-build-0.1');
+  assert.ok(ev.candidates.every(c => c.preferred === false));
+});
+
+test('prefer: the cheapest of the preferred group wins, even against cheaper non-preferred models', async () => {
+  const m = load(); m.useProfile('economy');
+  mockNet({ [XL]: { models: [
+    { id: 'grok-4-fast-reasoning',     created: MAR, prompt_text_token_price: 2000 },   // $0.20, cheapest overall
+    { id: 'grok-4-fast-non-reasoning', created: MAR, prompt_text_token_price: 2000 },   // $0.20
+    { id: 'grok-4.20-0309-non-reasoning', created: MAR, prompt_text_token_price: 12500 },
+  ] } });
+  assert.equal((await m.resolveModel('xai', 'k')).id, 'grok-4-fast-non-reasoning');
+});
+
+test('flagship is unchanged: newest reasoning model, non-reasoning excluded', async () => {
+  const m = load(); m.useProfile('flagship'); mockNet({ [XL]: LISTING_20261024 });
+  const ev = await m.inspectModels('xai', 'k');
+  assert.equal(ev.id, 'grok-4.7');
+  assert.equal(ev.candidates.find(c => c.id === 'grok-4.20-0309-non-reasoning').status, 'excluded');
+});
+
+test('configure: prefer can be set, cleared, and appears in effectiveConfig and PREFERENCE', () => {
+  const m = load();
+  m.configure({ providers: { xai: { prefer: 'non-?reasoning' } } });
+  assert.ok(m.effectiveConfig('xai').prefer.test('grok-x-non-reasoning'));
+  assert.ok(m.PREFERENCE.xai.prefer.test('grok-x-non-reasoning'));
+  m.configure({ providers: { xai: { prefer: null } } });
+  assert.equal(m.effectiveConfig('xai').prefer, null);
+  m.configure({});
+  assert.equal(m.effectiveConfig('xai').prefer, null);
+});

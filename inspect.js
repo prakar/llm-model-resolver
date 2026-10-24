@@ -33,9 +33,11 @@ const provider = args.find(a => !a.startsWith('--'));
 const flag     = name => args.includes('--' + name);
 const orderIdx = args.indexOf('--order');
 const order    = orderIdx >= 0 ? args[orderIdx + 1] : undefined;
+const prefIdx  = args.indexOf('--prefer');
+const preferArg = prefIdx >= 0 ? args[prefIdx + 1] : undefined;   // regex, or "none" to switch the profile's preference off
 
 if (!provider || !KEYS[provider]) {
-  console.error('usage: node inspect.js <xai|anthropic|gemini|openrouter> [--all] [--force] [--order newest|oldest|cheapest|provider]');
+  console.error('usage: node inspect.js <xai|anthropic|gemini|openrouter> [--all] [--force] [--order newest|oldest|cheapest|provider] [--prefer REGEX|none]');
   process.exit(2);
 }
 const key = KEYS[provider]();
@@ -46,7 +48,9 @@ if (!key) {
 
 (async () => {
   const t0 = Date.now();
-  const ev = await inspectModels(provider, key, { forceRefresh: flag('force'), order });
+  const opts = { forceRefresh: flag('force'), order };
+  if (preferArg !== undefined) opts.prefer = preferArg === 'none' ? null : preferArg;
+  const ev = await inspectModels(provider, key, opts);
   const ms = Date.now() - t0;
   const pc = effectiveConfig(provider);
 
@@ -59,6 +63,8 @@ if (!key) {
   if (ev.error) console.log(`error        ${ev.error}`);
   if (pc.include) console.log(`include      ${pc.include}`);
   if (pc.exclude) console.log(`exclude      ${pc.exclude}`);
+  if (preferArg !== undefined) console.log(`prefer       ${preferArg === 'none' ? '(off for this run)' : preferArg}   (from --prefer)`);
+  else if (pc.prefer) console.log(`prefer       ${pc.prefer}   (preferred models rank first, "pref" column)`);
   if (pc.knownPrices) {
     const src = pc.knownPrices.source || 'maintained';
     const upd = pc.knownPrices.updated ? `, updated ${pc.knownPrices.updated}` : '';
@@ -71,7 +77,9 @@ if (!key) {
   const wId    = Math.max(...rows.map(r => r.id.length), 5);
   const hasPrice = rows.some(r => r.priceIn != null);
 
+  const hasPref = rows.some(r => r.preferred);
   const header = ['rank', 'status'.padEnd(12), 'model'.padEnd(wId),
+    hasPref ? 'pref' : null,
     hasPrice ? '$/M in  ' : null,
     'created / generation',
     hasPrice ? 'source' : null,
@@ -86,6 +94,7 @@ if (!key) {
       String(r.rank ?? '').padStart(4),
       r.status.padEnd(12),
       r.id.padEnd(wId),
+      hasPref ? (r.preferred ? 'yes ' : '    ') : null,
       hasPrice ? price : null,
       when,
       hasPrice ? src : null,

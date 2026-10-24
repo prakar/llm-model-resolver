@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.5.0
+
+**Behavior change — read this.** The economy profile now prefers **non-reasoning** xAI models, and the
+`non-reasoning` exclusion is gone from economy. Before, economy could only choose among reasoning models
+and ranked them by input price alone, so on one account it picked `grok-build-0.1` ($1.00/M input, the
+cheapest listed), which spent about 10.5k hidden reasoning tokens to return about 1.9k visible ones on a
+single extraction call. With the same listing it now picks `grok-4.20-0309-non-reasoning`. To get the old
+price-only behaviour pass `{ prefer: null }` to `resolveModel()` or remove `prefer` from the profile.
+Flagship is unchanged. Run `node inspect.js xai` to see what you would get.
+
+### Added
+- **`prefer`** — a soft ranking rule. Models matching it rank ahead of every other eligible model; each
+  group is then ordered by `order`. If nothing matches, it is ignored. Set it per provider in a profile or
+  config (`prefer: "non-?reasoning"`), or per call (`resolveModel(p, key, { prefer: /re/ | 'str' | null })`).
+  Shown as `preferred` on every candidate in `inspectModels()` and in `PREFERENCE` / `effectiveConfig()`.
+- `node inspect.js <provider> --prefer <regex|none>` and a `prefer` line in its output.
+- Types: `useProfile`, `AVAILABLE_PROFILES`, `prefer`, `preferred`, and `'cheapest'` in the `order` and
+  `orderedBy` types (they were missing).
+
+### Fixed
+- **`npm test` did not run `test/readme.test.js`**, so README and type drift went unnoticed. It now runs
+  every test file.
+- Docs and comments that still said "flagship (default)" (the default has been economy since 1.3.0), the
+  wrongly labelled block in `profiles/settings.yml`, the README's timeout defaults (flagship is 10 minutes,
+  not 10 seconds), and the missing `no-key`, `/v1/models`, and inspection-result documentation.
+- The README guard tests described the pre-1.3 layout and were failing; they now check each profile's own
+  rules, fallbacks and timeouts.
+
+## 1.4.1
+- Clean test output; the `xl()` test mock includes realistic prices.
+
+## 1.4.0
+- **`order: cheapest`** using the live API price (`prompt_text_token_price` for xAI) or the maintained
+  `knownPrices` table. The economy profile no longer needs a pin. Candidates carry `priceIn`, `priceOut`,
+  `priceSource`, `priceConfidence`, `priceUpdated`.
+
+## 1.3.0
+- **Profiles.** `profiles/economy.yml` and `profiles/flagship.yml` ship in the package; the one-line switch
+  `flagship_performance` in `profiles/settings.yml` chooses between them (economy is the default).
+- `configure()`, `useProfile()`, `effectiveConfig()`, and `pin` support; `LLM_MODEL_RESOLVER_PROFILE`.
+
 ## 1.2.0
 
 **Behavior change — read this.** The default is now **newest first**. Before, the resolver took the first

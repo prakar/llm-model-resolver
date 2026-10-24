@@ -13,11 +13,12 @@
  * Edit them in the GitHub repo — they ship with the package so everyone who
  * clones it can change them directly without touching application code.
  *
- * Select a profile:
- *   env:  LLM_MODEL_RESOLVER_PROFILE=economy   (read at require time)
- *   code: require('llm-model-resolver').useProfile('economy')
+ * The default profile comes from profiles/settings.yml (flagship_performance: no →
+ * economy, which is what ships). Override it:
+ *   env:  LLM_MODEL_RESOLVER_PROFILE=flagship   (read at require time)
+ *   code: require('llm-model-resolver').useProfile('flagship')
  *
- * Available profiles: flagship (default), economy
+ * Available profiles: economy (default, cheapest; prefers non-reasoning models), flagship
  * Custom files:       loadConfig('/path/to/your-own.yml')
  *
  * @see https://github.com/prakar/llm-model-resolver
@@ -31,8 +32,9 @@ const path = require('path');
 const PROVIDERS = ['xai', 'anthropic', 'gemini', 'openrouter'];
 
 // ---------------------------------------------------------------------------
-// Built-in defaults = the "flagship" profile.
-// Every field here is overridable from the config file.
+// Built-in defaults: what applies when no profile is loaded (before the auto-load at the
+// bottom of this file, or if settings.yml cannot be read). They resemble the flagship
+// profile. Every field here is overridable from the config file.
 // ---------------------------------------------------------------------------
 const _BUILT_IN = {
   timeoutMs:  10_000,
@@ -131,6 +133,9 @@ function configure(raw) {
       pin:         over.pin      != null ? String(over.pin) : built.pin,
       include:     _toRegex(over.include) || built.include,
       exclude:     _toRegex(over.exclude) || built.exclude,
+      // prefer: models matching this pattern rank ahead of the rest (each group is then
+      // ordered by the active order mode). null = no preference.
+      prefer:      ('prefer' in over) ? _toRegex(over.prefer) : (built.prefer || null),
       fallback:    over.fallback != null ? String(over.fallback) : built.fallback,
       knownPrices: parsedPrices,
     };
@@ -350,7 +355,17 @@ function choose(entries, rules, mode) {
   let set = entries.filter(e => inc(e) && !exc(e)); let tier = 1;
   if (!set.length) { set = entries.filter(inc); tier = 2; }
   if (!set.length) return { tier: 3, ordered: entries.slice(), orderedBy: 'provider', chosen: entries[0] || null };
-  const { ordered, orderedBy } = orderCandidates(set, mode);
+  // A preference is a soft rule: preferred models rank first, but if none are listed the
+  // rest are used as before (an exclude, by contrast, can leave nothing and fall to tier 2).
+  const pref = rules.prefer ? set.filter(e => rules.prefer.test(e.id)) : [];
+  let ordered, orderedBy;
+  if (pref.length && pref.length < set.length) {
+    const a = orderCandidates(pref, mode);
+    const b = orderCandidates(set.filter(e => !rules.prefer.test(e.id)), mode);
+    ordered = a.ordered.concat(b.ordered); orderedBy = a.orderedBy;
+  } else {
+    ({ ordered, orderedBy } = orderCandidates(set, mode));
+  }
   return { tier, ordered, orderedBy, chosen: ordered[0] };
 }
 
@@ -455,7 +470,9 @@ async function evaluate(provider, apiKey, options) {
       );
     }
     const mode   = effectiveMode;
-    const rules  = { include: pc.include, exclude: pc.exclude };
+    // options.prefer overrides the profile's preference for this call (null switches it off).
+    const prefer = ('prefer' in options) ? _toRegex(options.prefer) : pc.prefer;
+    const rules  = { include: pc.include, exclude: pc.exclude, prefer };
     const usable = entries.filter(e => !_knownBad[p]?.has(e.id));
     const sel    = usable.length ? choose(usable, rules, mode) : null;
 
@@ -476,6 +493,7 @@ async function evaluate(provider, apiKey, options) {
         priceSource:      e.priceSource      ?? null,   // 'provider-api' | 'maintained' | null
         priceConfidence:  e.priceConfidence  ?? null,   // 'live' | 'maintained' | null
         priceUpdated:     e.priceUpdated     ?? null,   // ISO date string from knownPrices.updated
+        preferred:        !!(rules.prefer && rules.prefer.test(e.id)) && (status === 'chosen' || status === 'eligible'),
         status,
         rank:             rankOf.get(e.id)   || null,
       };
@@ -566,5 +584,5 @@ module.exports = {
   get DEFAULT_FALLBACKS() { return Object.fromEntries(PROVIDERS.map(p => [p, effectiveConfig(p).fallback])); },
   get DEFAULT_TIMEOUT_MS()  { return _cfg.timeoutMs; },
   get DEFAULT_COOLDOWN_MS() { return _cfg.cooldownMs; },
-  get PREFERENCE()          { return Object.fromEntries(PROVIDERS.filter(p=>p!=='openrouter').map(p=>[p,{include:effectiveConfig(p).include,exclude:effectiveConfig(p).exclude}])); },
+  get PREFERENCE()          { return Object.fromEntries(PROVIDERS.filter(p=>p!=='openrouter').map(p=>[p,{include:effectiveConfig(p).include,exclude:effectiveConfig(p).exclude,prefer:effectiveConfig(p).prefer||null}])); },
 };

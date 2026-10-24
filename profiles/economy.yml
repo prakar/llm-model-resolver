@@ -25,13 +25,21 @@ providers:
   xai:
     include:  "^grok-"
     # Excludes:
-    #   non-?reasoning  — the non-reasoning paired variant (keeps reasoning variants)
     #   image|imagine|video  — non-chat models that appear in /v1/models
     #   code-fast  — code-specialised fast variant
-    # Note: grok-4.7 is NOT excluded by name because its name doesn't say "reasoning".
-    # Price ordering handles it: at $2/M it ranks below grok-4.3 ($1.25) and
-    # grok-4-fast ($0.20) without any name heuristic.
-    exclude:  "non-?reasoning|image|imagine|video|code-fast"
+    # Note: reasoning models whose names don't say so (grok-4.7, grok-build-0.1) cannot be
+    # told apart by name. `prefer` makes sure a model that is explicitly non-reasoning wins;
+    # among the rest, price ordering applies.
+    exclude:  "image|imagine|video|code-fast"
+    # prefer: non-reasoning variants rank ahead of every other model, whatever their price.
+    # Why: the ranking uses input-token price only. A reasoning model can look the cheapest
+    # per input token and still cost many times more per request, because its hidden
+    # "thinking" tokens are billed as output (one grok-build-0.1 extraction call used 1.9k
+    # visible output tokens and 10.5k reasoning tokens). Economy work (tagging, extraction,
+    # classification) does not need that thinking. If xAI lists no non-reasoning model the
+    # preference is ignored and the cheapest model is chosen.
+    # Override per call: resolveModel('xai', key, { prefer: null })   // price only
+    prefer:   "non-?reasoning"
     # pin: "grok-4.3"  — uncomment for cost-ceiling enforcement or CI reproducibility
     fallback: "grok-4.3"
     # No knownPrices needed — xAI's API returns prompt_text_token_price live.
