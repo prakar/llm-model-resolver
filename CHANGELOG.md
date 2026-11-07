@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.0
+
+Additive: no change to the JavaScript API or to which model any profile picks.
+
+### Added
+- **`profiles/profiles.json`**: both profiles plus the default (from `settings.yml`) in one public,
+  language-neutral file with a `schemaVersion`, for clients that cannot `require()` the package (Android,
+  iOS, Python). Served by jsDelivr from npm or from git. `build-profiles` generates it and now fails early on
+  an invalid regex, an unknown provider, or an invalid `order`. See README, "Public JSON for non-Node clients".
+- **`test/vectors.json` + `test/vectors.test.js`**: conformance vectors (raw provider list response in,
+  chosen model out) that any port can run, and a test that `profiles.json` matches the shipped `.js` profiles.
+
 ## 1.5.2
 
 ### Fixed

@@ -1,0 +1,501 @@
+{
+  "schemaVersion": 1,
+  "description": "Conformance vectors for llm-model-resolver. Each case feeds a raw provider model-list response through the full pipeline (parse, price, filter, prefer, order, choose) under an inline config. Any port (e.g. Kotlin) must reproduce `expect`. The configs are self-contained copies, independent of the shipped profiles, so editing a price table never breaks these.",
+  "endpoints": {
+    "xai": "https://api.x.ai/v1/language-models",
+    "anthropic": "https://api.anthropic.com/v1/models",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/models"
+  },
+  "configs": {
+    "econ": {
+      "global": {
+        "timeoutMs": 300000,
+        "cooldownMs": 60000,
+        "order": "cheapest"
+      },
+      "providers": {
+        "xai": {
+          "include": "^grok-",
+          "exclude": "image|imagine|video|code-fast",
+          "prefer": "non-?reasoning",
+          "fallback": "grok-4.3"
+        },
+        "anthropic": {
+          "include": "^claude-",
+          "exclude": "instant|mini|fable|mythos",
+          "fallback": "claude-haiku-4-5",
+          "knownPrices": {
+            "source": "maintained",
+            "updated": "2026-01-01",
+            "models": {
+              "claude-3-haiku": {
+                "input": 0.25,
+                "output": 1.25
+              },
+              "claude-haiku-4": {
+                "input": 1,
+                "output": 5
+              },
+              "claude-haiku-5": {
+                "input": 0.1,
+                "output": 0.5
+              },
+              "claude-sonnet-5": {
+                "input": 3,
+                "output": 15
+              },
+              "claude-opus-5": {
+                "input": 15,
+                "output": 75
+              }
+            }
+          }
+        },
+        "gemini": {
+          "include": "gemini-",
+          "exclude": "lite|embedding|aqa|imagen|veo|tts|live|image|audio|latest",
+          "fallback": "gemini-flash-latest",
+          "knownPrices": {
+            "source": "maintained",
+            "updated": "2026-01-01",
+            "models": {
+              "gemini-2.5-flash": {
+                "input": 0.075,
+                "output": 0.3
+              },
+              "gemini-3.6-flash": {
+                "input": 0.75,
+                "output": 3.75
+              },
+              "gemini-2.5-pro": {
+                "input": 1.25,
+                "output": 5
+              }
+            }
+          }
+        },
+        "openrouter": {
+          "fallback": "openrouter/free"
+        }
+      }
+    },
+    "flag": {
+      "global": {
+        "timeoutMs": 600000,
+        "cooldownMs": 60000,
+        "order": "newest"
+      },
+      "providers": {
+        "xai": {
+          "include": "^grok-",
+          "exclude": "non-?reasoning|fast|mini|lite|code-fast|image|imagine|video",
+          "fallback": "grok-4"
+        },
+        "anthropic": {
+          "include": "^claude-",
+          "exclude": "haiku|instant|mini",
+          "fallback": "claude-sonnet-5"
+        },
+        "gemini": {
+          "include": "gemini-",
+          "exclude": "flash|lite|embedding|aqa|imagen|veo|tts|live|image|audio",
+          "fallback": "gemini-flash-latest"
+        },
+        "openrouter": {
+          "fallback": "openrouter/free"
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "anthropic economy: cheapest priced wins, fable excluded, unpriced ranked last",
+      "config": "econ",
+      "provider": "anthropic",
+      "response": {
+        "data": [
+          {
+            "id": "claude-opus-5-20260301",
+            "created_at": "2026-03-01T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "claude-sonnet-5-20260301",
+            "created_at": "2026-03-01T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "claude-haiku-4-5-20251001",
+            "created_at": "2025-10-01T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "claude-haiku-5-5-20261007",
+            "created_at": "2026-10-07T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "claude-3-haiku-20240307",
+            "created_at": "2024-03-07T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "claude-fable-5",
+            "created_at": "2026-06-09T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "claude-newthing-9",
+            "created_at": "2026-11-01T00:00:00Z",
+            "type": "model"
+          }
+        ]
+      },
+      "expect": {
+        "id": "claude-haiku-5-5-20261007",
+        "source": "live",
+        "tier": 1,
+        "orderedBy": "cheapest",
+        "ranked": [
+          "claude-haiku-5-5-20261007",
+          "claude-3-haiku-20240307",
+          "claude-haiku-4-5-20251001"
+        ]
+      }
+    },
+    {
+      "name": "anthropic economy: exclude leaves nothing, tier 2 uses include-only set",
+      "config": "econ",
+      "provider": "anthropic",
+      "response": {
+        "data": [
+          {
+            "id": "claude-fable-5",
+            "created_at": "2026-06-09T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "claude-mythos-5",
+            "created_at": "2026-06-09T00:00:00Z",
+            "type": "model"
+          }
+        ]
+      },
+      "expect": {
+        "id": "claude-fable-5",
+        "source": "live",
+        "tier": 2,
+        "orderedBy": "provider",
+        "ranked": [
+          "claude-fable-5",
+          "claude-mythos-5"
+        ]
+      }
+    },
+    {
+      "name": "anthropic economy: nothing matches include, tier 3 takes first listed",
+      "config": "econ",
+      "provider": "anthropic",
+      "response": {
+        "data": [
+          {
+            "id": "other-model-1",
+            "created_at": "2026-01-01T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "other-model-2",
+            "created_at": "2026-02-01T00:00:00Z",
+            "type": "model"
+          }
+        ]
+      },
+      "expect": {
+        "id": "other-model-1",
+        "source": "live",
+        "tier": 3,
+        "orderedBy": "provider",
+        "ranked": [
+          "other-model-1",
+          "other-model-2"
+        ]
+      }
+    },
+    {
+      "name": "gemini economy: generateContent only, lite and latest excluded, prefix price, tie by list order",
+      "config": "econ",
+      "provider": "gemini",
+      "response": {
+        "models": [
+          {
+            "name": "models/gemini-2.5-flash",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          },
+          {
+            "name": "models/gemini-2.5-flash-preview-09-2025",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          },
+          {
+            "name": "models/gemini-2.5-flash-lite",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          },
+          {
+            "name": "models/gemini-flash-latest",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          },
+          {
+            "name": "models/gemini-embedding-001",
+            "supportedGenerationMethods": [
+              "embedContent"
+            ]
+          },
+          {
+            "name": "models/gemini-2.5-pro",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          },
+          {
+            "name": "models/gemini-3.6-flash",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "id": "gemini-2.5-flash",
+        "source": "live",
+        "tier": 1,
+        "orderedBy": "cheapest",
+        "ranked": [
+          "gemini-2.5-flash",
+          "gemini-2.5-flash-preview-09-2025",
+          "gemini-3.6-flash"
+        ]
+      }
+    },
+    {
+      "name": "xai economy: non-reasoning preferred even when a reasoning model is cheaper",
+      "config": "econ",
+      "provider": "xai",
+      "response": {
+        "models": [
+          {
+            "id": "grok-build-0.1",
+            "created": 1770000000,
+            "prompt_text_token_price": 10000
+          },
+          {
+            "id": "grok-4.20-0309-non-reasoning",
+            "created": 1773014400,
+            "prompt_text_token_price": 20000
+          },
+          {
+            "id": "grok-4.20-0309-reasoning",
+            "created": 1773014400,
+            "prompt_text_token_price": 15000
+          },
+          {
+            "id": "grok-4-fast-non-reasoning",
+            "created": 1760000000,
+            "prompt_text_token_price": 2000
+          },
+          {
+            "id": "grok-imagine-image",
+            "created": 1770000000,
+            "prompt_text_token_price": 500
+          }
+        ]
+      },
+      "expect": {
+        "id": "grok-4-fast-non-reasoning",
+        "source": "live",
+        "tier": 1,
+        "orderedBy": "cheapest",
+        "ranked": [
+          "grok-4-fast-non-reasoning",
+          "grok-4.20-0309-non-reasoning",
+          "grok-build-0.1"
+        ]
+      }
+    },
+    {
+      "name": "xai economy: no non-reasoning model listed, preference ignored, cheapest wins",
+      "config": "econ",
+      "provider": "xai",
+      "response": {
+        "models": [
+          {
+            "id": "grok-4.3",
+            "created": 1773014400,
+            "prompt_text_token_price": 12500
+          },
+          {
+            "id": "grok-build-0.1",
+            "created": 1770000000,
+            "prompt_text_token_price": 10000
+          },
+          {
+            "id": "grok-4.7",
+            "created": 1778803200,
+            "prompt_text_token_price": 20000
+          }
+        ]
+      },
+      "expect": {
+        "id": "grok-build-0.1",
+        "source": "live",
+        "tier": 1,
+        "orderedBy": "cheapest",
+        "ranked": [
+          "grok-build-0.1",
+          "grok-4.3",
+          "grok-4.7"
+        ]
+      }
+    },
+    {
+      "name": "xai flagship: newest by created, fast/mini/non-reasoning/image excluded",
+      "config": "flag",
+      "provider": "xai",
+      "response": {
+        "models": [
+          {
+            "id": "grok-4.3",
+            "created": 1773014400,
+            "prompt_text_token_price": 12500
+          },
+          {
+            "id": "grok-4.7",
+            "created": 1778803200,
+            "prompt_text_token_price": 20000
+          },
+          {
+            "id": "grok-4-fast-reasoning",
+            "created": 1779000000,
+            "prompt_text_token_price": 2000
+          },
+          {
+            "id": "grok-4.20-0309-non-reasoning",
+            "created": 1780000000,
+            "prompt_text_token_price": 20000
+          },
+          {
+            "id": "grok-imagine-video",
+            "created": 1781000000,
+            "prompt_text_token_price": 100
+          }
+        ]
+      },
+      "expect": {
+        "id": "grok-4.7",
+        "source": "live",
+        "tier": 1,
+        "orderedBy": "created",
+        "ranked": [
+          "grok-4.7",
+          "grok-4.3"
+        ]
+      }
+    },
+    {
+      "name": "anthropic flagship: newest non-haiku by created_at",
+      "config": "flag",
+      "provider": "anthropic",
+      "response": {
+        "data": [
+          {
+            "id": "claude-opus-5-20260301",
+            "created_at": "2026-03-01T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "claude-sonnet-5-20260601",
+            "created_at": "2026-06-01T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "claude-haiku-5-5-20261007",
+            "created_at": "2026-10-07T00:00:00Z",
+            "type": "model"
+          },
+          {
+            "id": "claude-sonnet-4-5-20250929",
+            "created_at": "2025-09-29T00:00:00Z",
+            "type": "model"
+          }
+        ]
+      },
+      "expect": {
+        "id": "claude-sonnet-5-20260601",
+        "source": "live",
+        "tier": 1,
+        "orderedBy": "created",
+        "ranked": [
+          "claude-sonnet-5-20260601",
+          "claude-opus-5-20260301",
+          "claude-sonnet-4-5-20250929"
+        ]
+      }
+    },
+    {
+      "name": "gemini flagship: newest pro by version number, unversioned alias last",
+      "config": "flag",
+      "provider": "gemini",
+      "response": {
+        "models": [
+          {
+            "name": "models/gemini-2.5-pro",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          },
+          {
+            "name": "models/gemini-3.1-pro",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          },
+          {
+            "name": "models/gemini-3-pro",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          },
+          {
+            "name": "models/gemini-pro-latest",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          },
+          {
+            "name": "models/gemini-3.8-flash",
+            "supportedGenerationMethods": [
+              "generateContent"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "id": "gemini-3.1-pro",
+        "source": "live",
+        "tier": 1,
+        "orderedBy": "version",
+        "ranked": [
+          "gemini-3.1-pro",
+          "gemini-3-pro",
+          "gemini-2.5-pro"
+        ]
+      }
+    }
+  ]
+}
